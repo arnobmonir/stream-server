@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, BackgroundTasks, Body
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -6,6 +6,8 @@ import os
 from backend.schemas import MediaOut
 from backend.crud.media import create_media, get_media, list_media, delete_media, update_media
 from backend.auth.dependencies import get_db, get_current_user
+from backend.utils.transcoding import transcode_to_hls
+import subprocess
 
 MEDIA_ROOT = os.getenv("MEDIA_ROOT", "media")
 
@@ -28,12 +30,18 @@ def api_upload_media(
     genre: str = None,
     tags: List[str] = [],
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    background_tasks: BackgroundTasks = None
 ):
     save_path = os.path.join(MEDIA_ROOT, file.filename)
     with open(save_path, "wb") as f:
         f.write(file.file.read())
     media = create_media(db, file.filename, save_path, genre, tags, current_user.id, user=current_user)
+    # Automatically transcode to HLS in the background if video
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext in [".mp4", ".mkv", ".mov"] and background_tasks is not None:
+        hls_dir = os.path.join(MEDIA_ROOT, f"hls_{media.id}")
+        background_tasks.add_task(transcode_to_hls, save_path, hls_dir)
     return MediaOut(
         id=media.id,
         filename=media.filename,
@@ -41,6 +49,70 @@ def api_upload_media(
         genre=media.genre.name if media.genre else None,
         tags=[t.name for t in media.tags]
     )
+
+@router.post("/media/download")
+def download_video(
+    url: str = Body(...),
+    genre: str = Body(None),
+    tags: List[str] = Body([]),
+    quality: str = Body("best"),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    background_tasks: BackgroundTasks = None
+):
+    # Use yt-dlp to download the video
+    # Save to MEDIA_ROOT, get the filename
+    os.makedirs(MEDIA_ROOT, exist_ok=True)
+    cmd = [
+        "yt-dlp",
+        "-f", quality,
+        "-o", os.path.join(MEDIA_ROOT, "%(title)s.%(ext)s"),
+        url
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"yt-dlp failed: {result.stderr}")
+    # Find the downloaded file (yt-dlp prints the filename)
+    # We'll look for the newest file in MEDIA_ROOT
+    files = [os.path.join(MEDIA_ROOT, f) for f in os.listdir(MEDIA_ROOT)]
+    latest_file = max(files, key=os.path.getctime)
+    filename = os.path.basename(latest_file)
+    # Add to DB
+    media = create_media(db, filename, latest_file, genre, tags, current_user.id, user=current_user)
+    # Trigger HLS transcoding if video
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in [".mp4", ".mkv", ".mov"] and background_tasks is not None:
+        hls_dir = os.path.join(MEDIA_ROOT, f"hls_{media.id}")
+        background_tasks.add_task(transcode_to_hls, latest_file, hls_dir)
+    return {"detail": "Download started and media added!"}
+
+@router.get("/media/hls/{media_id}/{filename}")
+def serve_hls(media_id: int, filename: str, db: Session = Depends(get_db)):
+    # Serve HLS playlist (.m3u8) and segments (.ts)
+    hls_dir = os.path.join(MEDIA_ROOT, f"hls_{media_id}")
+    file_path = os.path.join(hls_dir, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="HLS file not found")
+    return FileResponse(file_path)
+
+@router.post("/media/hls/{media_id}/trigger")
+def trigger_hls(media_id: int, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
+    media = get_media(db, media_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    ext = os.path.splitext(media.filename)[1].lower()
+    if ext not in [".mp4", ".mkv", ".mov"]:
+        return {"detail": "Not a video file"}
+    hls_dir = os.path.join(MEDIA_ROOT, f"hls_{media_id}")
+    playlist_path = os.path.join(hls_dir, "playlist.m3u8")
+    if os.path.exists(playlist_path):
+        return {"detail": "HLS already exists"}
+    if background_tasks is not None:
+        background_tasks.add_task(transcode_to_hls, media.filepath, hls_dir)
+        return {"detail": "HLS transcoding started"}
+    # Fallback: run synchronously (should not happen in normal API usage)
+    transcode_to_hls(media.filepath, hls_dir)
+    return {"detail": "HLS transcoding started (sync)"}
 
 @router.get("/media/stream/{media_id}")
 def api_stream_media(
