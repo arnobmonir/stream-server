@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000', // Change to your FastAPI backend URL
+  baseURL: 'http://192.168.0.2:8000', // Change to your FastAPI backend URL
 });
 
 export function setAuthToken(token) {
