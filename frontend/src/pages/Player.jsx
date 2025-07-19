@@ -26,7 +26,6 @@ export default function Player() {
         const res = await api.get('/media');
         const item = res.data.find(m => m.id === parseInt(id));
         setMedia(item);
-        // Related: same genre or tag, exclude self
         setRelated(res.data.filter(m => m.id !== parseInt(id) && (m.genre === item.genre || m.tags.some(t => item.tags.includes(t)))));
       } catch (err) {
         setError('Failed to load media');
@@ -41,7 +40,7 @@ export default function Player() {
   if (loading || !media) return <Skeleton variant="rectangular" height={400} sx={{ borderRadius: 3, mt: 4 }} />;
 
   const mediaType = getMediaType(media.filename);
-  let src = `http://localhost:8000/media/stream/${media.id}`;
+  let src = `/media/stream/${media.id}`;
   if (quality === 'low' && (mediaType === 'video' || mediaType === 'audio')) {
     src += '?quality=low';
   }
@@ -94,7 +93,7 @@ export default function Player() {
               <Grid item xs={12} sm={6} md={3} key={item.id}>
                 <Card sx={{ bgcolor: 'background.paper', borderRadius: 2, boxShadow: 2 }}>
                   {getMediaType(item.filename) === 'image' ? (
-                    <CardMedia component="img" height="120" image={`http://localhost:8000/media/stream/${item.id}`} alt={item.filename} sx={{ objectFit: 'cover' }} />
+                    <CardMedia component="img" height="120" image={`/media/stream/${item.id}`} alt={item.filename} sx={{ objectFit: 'cover' }} />
                   ) : (
                     <Box height={120} display="flex" alignItems="center" justifyContent="center" bgcolor="#222">
                       <Typography variant="h3">{getMediaType(item.filename).toUpperCase()}</Typography>
