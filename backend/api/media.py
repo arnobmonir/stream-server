@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, BackgroundTasks, Body
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, BackgroundTasks, Body, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -86,13 +86,14 @@ def download_video(
         background_tasks.add_task(transcode_to_hls, latest_file, hls_dir)
     return {"detail": "Download started and media added!"}
 
-@router.get("/media/hls/{media_id}/{filename}")
-def serve_hls(media_id: int, filename: str, db: Session = Depends(get_db)):
-    # Serve HLS playlist (.m3u8) and segments (.ts)
+@router.api_route("/media/hls/{media_id}/{filename}", methods=["GET", "HEAD"])
+def serve_hls(media_id: int, filename: str, db: Session = Depends(get_db), request: Request = None):
     hls_dir = os.path.join(MEDIA_ROOT, f"hls_{media_id}")
     file_path = os.path.join(hls_dir, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="HLS file not found")
+    if request and request.method == "HEAD":
+        return Response(status_code=200)
     return FileResponse(file_path)
 
 @router.post("/media/hls/{media_id}/trigger")
@@ -167,4 +168,15 @@ def api_update_media(media_id: int, data: dict, db: Session = Depends(get_db), c
         filepath=media.filepath,
         genre=media.genre.name if media.genre else None,
         tags=[t.name for t in media.tags]
-    ) 
+    )
+
+@router.get("/media/stat/{media_id}")
+def media_stat(media_id: int, db: Session = Depends(get_db)):
+    media = get_media(db, media_id)
+    if not media or not os.path.exists(media.filepath):
+        raise HTTPException(status_code=404, detail="Media not found")
+    stat = os.stat(media.filepath)
+    return JSONResponse({
+        "size": stat.st_size,
+        "mtime": stat.st_mtime
+    }) 
