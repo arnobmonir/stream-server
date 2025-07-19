@@ -46,7 +46,7 @@ def api_upload_media(
 def api_stream_media(
     media_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    # current_user = Depends(get_current_user),  # Removed authentication for streaming
     quality: Optional[str] = Query(None, description="Set to 'low' for low-bitrate streaming"),
     background_tasks: BackgroundTasks = None
 ):
