@@ -195,7 +195,7 @@ export default function Player() {
                   </IconButton>
                 </Tooltip>
               </Stack>
-              <Box sx={{ bgcolor: '#000', borderRadius: 2, overflow: 'hidden', mb: 2, aspectRatio: '16/9', minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box sx={{ bgcolor: '#000', borderRadius: 2, overflow: 'hidden', mb: 2, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {quality === 'original' ? (
                   processing ? (
                     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height={240}>
@@ -203,10 +203,10 @@ export default function Player() {
                       <Typography mt={2}>Processing video for streaming... Please wait.</Typography>
                     </Box>
                   ) : hlsReady ? (
-                    <video ref={videoRef} controls style={{ width: '100%', height: '100%' }} />
+                    <video ref={videoRef} controls style={{ maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto' }} />
                   ) : null
                 ) : (
-                  <video src={src} controls style={{ width: '100%', height: '100%' }} />
+                  <video src={src} controls style={{ maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto' }} />
                 )}
               </Box>
             </Box>
