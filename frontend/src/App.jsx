@@ -9,11 +9,16 @@ import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import AdminAuditLog from './pages/AdminAuditLog';
 import { AppBar, Toolbar, Button, Container, Typography } from '@mui/material';
-import api from './api';
+import api, { setAuthToken } from './api';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [role, setRole] = useState(null);
+
+  // Ensure axios always has the correct Authorization header
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
 
   useEffect(() => {
     async function fetchRole() {
@@ -34,12 +39,14 @@ function App() {
   const handleLogin = (newToken) => {
     setToken(newToken);
     localStorage.setItem('token', newToken);
+    setAuthToken(newToken);
   };
 
   const handleLogout = () => {
     setToken(null);
     setRole(null);
     localStorage.removeItem('token');
+    setAuthToken(null);
   };
 
   return (
@@ -66,8 +73,8 @@ function App() {
       </AppBar>
       <Container maxWidth="md" sx={{ mt: 4 }}>
         <Routes>
-          <Route path="/login" element={<Login onLogin={handleLogin} />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={token ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} />
+          <Route path="/register" element={token ? <Navigate to="/" replace /> : <Register />} />
           <Route path="/upload" element={token ? <Upload /> : <Navigate to="/login" replace />} />
           <Route path="/player/:id" element={token ? <Player /> : <Navigate to="/login" replace />} />
           <Route path="/profile" element={token ? <Profile /> : <Navigate to="/login" replace />} />
